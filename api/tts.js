@@ -1,38 +1,36 @@
 // api/tts.js
-const { UniversalEdgeTTS } = require('edge-tts-universal'); 
+// 自动兼容 ESM 和 CommonJS
+const isESM = typeof module === 'undefined';
 
-module.exports = async (req, res) => {
-    // 允许跨域，方便程序接入
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') return res.status(200).end();
-
-    const text = req.query.text || "测试成功";
-    const voice = req.query.voice || "zh-CN-XiaoxiaoNeural";
-
+async function handler(req, res) {
     try {
-        // 直接使用 npm 安装的包，不要 require('../src/...')
+        // 尝试加载依赖
+        const { UniversalEdgeTTS } = require('edge-tts-universal');
         const tts = new UniversalEdgeTTS();
-        const result = await tts.synthesize(text, voice);
+        
+        const text = req.query.text || "连接成功";
+        const result = await tts.synthesize(text);
         
         res.setHeader('Content-Type', 'audio/mpeg');
-
-        // 把流传给前端
         const reader = result.getReader();
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            res.write(value); 
+            res.write(value);
         }
         res.end();
     } catch (e) {
-        // 如果报错，直接把错误显示在页面上，方便排查
-        res.status(500).json({ 
-            error: "运行时崩溃", 
-            message: e.message,
-            tip: "请检查 package.json 是否包含 edge-tts-universal 依赖"
-        });
+        // 强制把错误打印到页面上，不再依赖 Vercel Logs
+        res.status(500).send(`
+            <h1>运行崩溃诊断</h1>
+            <p><b>错误信息:</b> ${e.message}</p>
+            <p><b>错误堆栈:</b> ${e.stack}</p>
+        `);
     }
-};
+}
+
+if (isESM) {
+    export default handler;
+} else {
+    module.exports = handler;
+}
