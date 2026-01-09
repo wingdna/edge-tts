@@ -1,18 +1,22 @@
-// api/tts.js
-// 自动兼容 ESM 和 CommonJS
-const isESM = typeof module === 'undefined';
+import { UniversalEdgeTTS } from 'edge-tts-universal';
+import WebSocket from 'ws';
 
-async function handler(req, res) {
+// 补丁：Edge-TTS 必须环境
+global.WebSocket = WebSocket;
+
+export default async function handler(req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
     try {
-        // 尝试加载依赖
-        const { UniversalEdgeTTS } = require('edge-tts-universal');
-        const tts = new UniversalEdgeTTS();
+        const text = req.query.text || (req.body && req.body.input) || "测试语音";
+        const voice = req.query.voice || "zh-CN-XiaoxiaoNeural";
         
-        const text = req.query.text || "连接成功";
-        const result = await tts.synthesize(text);
+        const tts = new UniversalEdgeTTS();
+        const response = await tts.synthesize(text, voice);
         
         res.setHeader('Content-Type', 'audio/mpeg');
-        const reader = result.getReader();
+
+        const reader = response.getReader();
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -20,17 +24,7 @@ async function handler(req, res) {
         }
         res.end();
     } catch (e) {
-        // 强制把错误打印到页面上，不再依赖 Vercel Logs
-        res.status(500).send(`
-            <h1>运行崩溃诊断</h1>
-            <p><b>错误信息:</b> ${e.message}</p>
-            <p><b>错误堆栈:</b> ${e.stack}</p>
-        `);
+        console.error("Runtime Error:", e.message);
+        res.status(500).json({ error: e.message });
     }
-}
-
-if (isESM) {
-    export default handler;
-} else {
-    module.exports = handler;
 }
